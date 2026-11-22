@@ -5,6 +5,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
@@ -62,9 +63,55 @@ export function cursorUsageResponseToLimits(
     : makeUnavailableUsageLimits({ checkedAt, reason: "unsupported" });
 }
 
+const cents = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+const UsageSummary = Schema.Struct({
+  individualUsage: Schema.Struct({
+    onDemand: Schema.Struct({
+      enabled: Schema.Boolean,
+      used: cents,
+      limit: Schema.optional(Schema.NullOr(cents)),
+    }),
+  }),
+});
+
+const decodeSubject = Schema.decodeEffect(
+  Schema.fromJsonString(Schema.Struct({ sub: Schema.NonEmptyString })),
+);
+
+const readSubject = (token: string) =>
+  decodeSubject(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8"));
+
+const readOnDemand = Effect.fn("Cursor.readOnDemand")(function* (
+  providerToken: string,
+  session: Effect.Effect<string | undefined>,
+) {
+  const token = yield* session;
+  if (!token) return;
+  const { sub } = yield* readSubject(token);
+  if (token !== providerToken && (yield* readSubject(providerToken)).sub !== sub) return;
+  const client = yield* HttpClient.HttpClient;
+  const response = yield* client
+    .execute(
+      HttpClientRequest.get("https://cursor.com/api/usage-summary").pipe(
+        HttpClientRequest.setHeader(
+          "cookie",
+          "WorkosCursorSessionToken=" + encodeURIComponent(sub + "::" + token),
+        ),
+      ),
+    )
+    .pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }));
+  const {
+    individualUsage: { onDemand },
+  } = yield* HttpClientResponse.schemaBodyJson(UsageSummary)(
+    yield* HttpClientResponse.filterStatusOk(response),
+  );
+  if (onDemand.enabled) return { spentCents: onDemand.used, limitCents: onDemand.limit ?? null };
+});
+
 export const readCursorUsageLimits = Effect.fn("readCursorUsageLimits")(function* (
   settings: Pick<CursorSettings, "apiEndpoint">,
   environment: NodeJS.ProcessEnv = process.env,
+  cliSession: Effect.Effect<string | undefined> = Effect.undefined,
 ) {
   const checkedAt = DateTime.formatIso(yield* DateTime.now);
   return yield* Effect.gen(function* () {
@@ -87,20 +134,49 @@ export const readCursorUsageLimits = Effect.fn("readCursorUsageLimits")(function
     }
     if (!token) return makeUnavailableUsageLimits({ checkedAt, reason: "unsupported" });
     const client = yield* HttpClient.HttpClient;
-    const response = yield* client.execute(
-      HttpClientRequest.post(`${endpoint}/aiserver.v1.DashboardService/GetCurrentPeriodUsage`).pipe(
-        HttpClientRequest.bearerToken(token),
-        HttpClientRequest.setHeaders({
-          "connect-protocol-version": "1",
-          "x-cursor-client-type": "cli",
+    const period = Effect.gen(function* () {
+      const response = yield* client.execute(
+        HttpClientRequest.post(
+          `${endpoint}/aiserver.v1.DashboardService/GetCurrentPeriodUsage`,
+        ).pipe(
+          HttpClientRequest.bearerToken(token!),
+          HttpClientRequest.setHeaders({
+            "connect-protocol-version": "1",
+            "x-cursor-client-type": "cli",
+          }),
+          HttpClientRequest.bodyJsonUnsafe({}),
+        ),
+      );
+      const body = yield* HttpClientResponse.schemaBodyJson(CursorUsageResponse)(
+        yield* HttpClientResponse.filterStatusOk(response),
+      );
+      return cursorUsageResponseToLimits(body, checkedAt);
+    }).pipe(
+      Effect.timeout("5 seconds"),
+      Effect.orElseSucceed(() =>
+        makeUnavailableUsageLimits({
+          checkedAt,
+          reason: "probeFailed",
+          message: "Cursor could not read usage limits.",
         }),
-        HttpClientRequest.bodyJsonUnsafe({}),
       ),
     );
-    const body = yield* HttpClientResponse.schemaBodyJson(CursorUsageResponse)(
-      yield* HttpClientResponse.filterStatusOk(response),
+    const [limits, onDemand] = yield* Effect.all(
+      [
+        period,
+        endpoint === DEFAULT_CURSOR_API_ENDPOINT
+          ? readOnDemand(
+              token,
+              environment.CURSOR_AUTH_TOKEN?.trim() ? Effect.succeed(token) : cliSession,
+            ).pipe(
+              Effect.timeout("5 seconds"),
+              Effect.orElseSucceed(() => undefined),
+            )
+          : Effect.undefined,
+      ],
+      { concurrency: 2 },
     );
-    return cursorUsageResponseToLimits(body, checkedAt);
+    return onDemand ? { checkedAt, windows: limits.windows, onDemand } : limits;
   }).pipe(
     Effect.timeout("10 seconds"),
     Effect.orElseSucceed(() =>

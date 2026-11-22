@@ -509,6 +509,37 @@ export function UsageLimitsSection({
                   {providerClients.get(pool.driver)?.label ?? pool.driver}
                 </Text>
               </View>
+              {pool.accounts.map((account) => {
+                const budget = account.limits.onDemand;
+                if (!budget) return null;
+                const money = new Intl.NumberFormat(undefined, {
+                  style: "currency",
+                  currency: "USD",
+                });
+                const spent = money.format(budget.spentCents / 100);
+                const limit = budget.limitCents;
+                return (
+                  <View key={account.key} className="rounded-lg border border-border p-3">
+                    <Text className="font-t3-medium text-foreground">{gt("On-demand")}</Text>
+                    {pool.accounts.length > 1 && <Text>{accountName(account, m)}</Text>}
+                    <Text className="text-foreground">
+                      {limit === null
+                        ? gt("{spent} spent · No personal limit reported", { spent })
+                        : gt("{spent} spent of {limit}", {
+                            spent,
+                            limit: money.format(limit / 100),
+                          })}
+                    </Text>
+                    {limit !== null && limit > 0 && (
+                      <Text>
+                        {gt("{percent}% left", {
+                          percent: Math.max(0, Math.round(100 * (1 - budget.spentCents / limit))),
+                        })}
+                      </Text>
+                    )}
+                  </View>
+                );
+              })}
               {windows.map((window) => {
                 const details =
                   pool.driver === "cursor"

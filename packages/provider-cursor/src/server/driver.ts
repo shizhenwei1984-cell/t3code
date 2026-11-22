@@ -5,6 +5,7 @@ import {
 } from "@t3tools/contracts";
 import { CursorSettings } from "../settings.ts";
 import type { SDKModel } from "@cursor/sdk";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as FileSystem from "effect/FileSystem";
@@ -40,6 +41,10 @@ import * as CursorCredentialStore from "./credentialStore.ts";
 import * as CursorAgentSdk from "./CursorAgentSdk.ts";
 import * as CursorSdk from "./CursorSdk.ts";
 import * as CursorUsageAccounts from "./CursorUsageAccounts.ts";
+
+const decodeCliAuth = Schema.decodeEffect(
+  Schema.fromJsonString(Schema.Struct({ accessToken: Schema.NonEmptyString })),
+);
 
 const decodeCursorSettings = Schema.decodeSync(CursorSettings);
 const isSdkRunnerError = Schema.is(CursorAgentSdk.CursorAgentSdkRunnerError);
@@ -101,6 +106,23 @@ export const CursorDriver: ProviderDriver<
     const httpClient = yield* HttpClient.HttpClient;
     const sdkRunner = yield* CursorAgentSdk.CursorAgentSdkRunner;
     const processEnv = yield* mergeProviderInstanceEnvironment(environment);
+    const platform = yield* HostProcess.Platform;
+    const home = processEnv.HOME || processEnv.USERPROFILE || (yield* HostProcess.HomeDirectory);
+    const cliConfigDir =
+      processEnv.CURSOR_CONFIG_DIR ||
+      (home &&
+        (platform === "darwin"
+          ? path.join(home, ".cursor")
+          : platform === "win32"
+            ? path.join(processEnv.APPDATA || path.join(home, "AppData", "Roaming"), "Cursor")
+            : path.join(processEnv.XDG_CONFIG_HOME || path.join(home, ".config"), "cursor")));
+    const cliSession = cliConfigDir
+      ? fileSystem.readFileString(path.join(cliConfigDir, "auth.json")).pipe(
+          Effect.flatMap(decodeCliAuth),
+          Effect.map((auth) => auth.accessToken),
+          Effect.orElseSucceed(() => undefined),
+        )
+      : Effect.undefined;
     const continuationIdentity = defaultProviderContinuationIdentity({
       driverKind: DRIVER_KIND,
       instanceId,
@@ -236,10 +258,14 @@ export const CursorDriver: ProviderDriver<
                 snapshot.auth.status === "authenticated"
               ),
             (snapshot) =>
-              readCursorUsageLimits(effectiveConfig, {
-                ...processEnv,
-                CURSOR_API_KEY: apiKey,
-              }).pipe(Effect.map((usageLimits) => ({ ...snapshot, usageLimits }))),
+              readCursorUsageLimits(
+                effectiveConfig,
+                {
+                  ...processEnv,
+                  CURSOR_API_KEY: apiKey,
+                },
+                cliSession,
+              ).pipe(Effect.map((usageLimits) => ({ ...snapshot, usageLimits }))),
           ),
         ),
       ),

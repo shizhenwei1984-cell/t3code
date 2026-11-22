@@ -639,6 +639,8 @@ function PoolSection({ pool, now }: { readonly pool: LimitPool; readonly now: nu
   const label = providerClients.get(pool.driver)?.label ?? String(pool.driver);
   const windows = displayLimitWindows(pool);
   const m = useMessages();
+  const gt = useGT();
+  const usd = new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" });
   return (
     <section className="flex flex-col gap-3">
       <h2 className="flex items-center gap-2 text-sm font-medium text-foreground">
@@ -651,6 +653,30 @@ function PoolSection({ pool, now }: { readonly pool: LimitPool; readonly now: nu
         />
         {label}
       </h2>
+      {pool.accounts.map((account) => {
+        const budget = account.limits.onDemand;
+        if (!budget) return null;
+        const spent = usd.format(budget.spentCents / 100);
+        const limit = budget.limitCents;
+        return (
+          <div key={account.key} className="rounded-lg border p-3 text-sm">
+            <h3 className="font-medium">{gt("On-demand")}</h3>
+            {pool.accounts.length > 1 && <AccountName account={account} />}
+            <p>
+              {limit === null
+                ? gt("{spent} spent · No personal limit reported", { spent })
+                : gt("{spent} spent of {limit}", { spent, limit: usd.format(limit / 100) })}
+            </p>
+            {limit !== null && limit > 0 && (
+              <p>
+                {gt("{percent}% left", {
+                  percent: Math.max(0, Math.round(100 * (1 - budget.spentCents / limit))),
+                })}
+              </p>
+            )}
+          </div>
+        );
+      })}
       {windows.map((window) => {
         const details =
           pool.driver === "cursor" ? cursorUsageWindowDetails(window.id, pool, m) : undefined;

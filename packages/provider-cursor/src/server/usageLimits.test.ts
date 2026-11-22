@@ -102,6 +102,90 @@ describe("Cursor usage limits", () => {
     ).toEqual([{ id: "totalPercentUsed", kind: "monthly", label: "Overall", usedPercent: 100 }]);
   });
 
+  it.effect("reads the personal on-demand budget independently of team spending", () =>
+    Effect.gen(function* () {
+      const token = "test." + Buffer.from('{"sub":"test-account"}').toString("base64url") + ".sig";
+      for (const [enabled, limit] of [
+        [true, null],
+        [true, 2000],
+        [false, 0],
+      ] as const) {
+        const result = yield* readCursorUsageLimits(
+          { apiEndpoint: "" },
+          { CURSOR_AUTH_TOKEN: token },
+        ).pipe(
+          Effect.provideService(
+            HttpClient.HttpClient,
+            HttpClient.make((request) => {
+              const dashboard = request.url === "https://cursor.com/api/usage-summary";
+              if (dashboard) {
+                expect(request.headers.cookie).toBe(
+                  "WorkosCursorSessionToken=" + encodeURIComponent("test-account::" + token),
+                );
+              }
+              return Effect.succeed(
+                HttpClientResponse.fromWeb(
+                  request,
+                  Response.json(
+                    dashboard
+                      ? { individualUsage: { onDemand: { enabled, used: 125, limit } } }
+                      : {
+                          planUsage: { totalPercentUsed: 21 },
+                          spendLimitUsage: { pooledLimit: 99000 },
+                        },
+                  ),
+                ),
+              );
+            }),
+          ),
+        );
+        expect(result.windows[0]?.usedPercent).toBe(21);
+        expect(result).toHaveProperty("checkedAt");
+        if (enabled)
+          expect(result).toHaveProperty("onDemand", { spentCents: 125, limitCents: limit });
+        else expect(result).not.toHaveProperty("onDemand");
+      }
+    }),
+  );
+
+  it.effect("uses a CLI dashboard session only for the exchanged API key's account", () =>
+    Effect.gen(function* () {
+      const jwt = (sub: string, sig: string) =>
+        "test." + Buffer.from(JSON.stringify({ sub })).toString("base64url") + "." + sig;
+      for (const subject of ["personal", "different"]) {
+        let calls = 0;
+        const cli = jwt(subject, "cli");
+        const result = yield* readCursorUsageLimits(
+          { apiEndpoint: "" },
+          { CURSOR_API_KEY: "fixture" },
+          Effect.succeed(cli),
+        ).pipe(
+          Effect.provideService(
+            HttpClient.HttpClient,
+            HttpClient.make((request) => {
+              let body: unknown = { planUsage: { totalPercentUsed: 11 } };
+              if (request.url.endsWith("/auth/exchange_user_api_key"))
+                body = { accessToken: jwt("personal", "key") };
+              if (request.url === "https://cursor.com/api/usage-summary") {
+                calls++;
+                expect(request.headers.cookie).toBe(
+                  "WorkosCursorSessionToken=" + encodeURIComponent("personal::" + cli),
+                );
+                body = { individualUsage: { onDemand: { enabled: true, used: 0, limit: 0 } } };
+              }
+              return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(body)));
+            }),
+          ),
+        );
+        expect(calls).toBe(subject === "personal" ? 1 : 0);
+        if (subject === "personal")
+          expect(result).toHaveProperty("onDemand", { spentCents: 0, limitCents: 0 });
+        else expect(result).not.toHaveProperty("onDemand");
+        expect(result.windows[0]?.usedPercent).toBe(11);
+      }
+    }),
+  );
+
   it.effect("requires explicit credentials and accepts an auth token", () =>
     Effect.gen(function* () {
       for (const token of [undefined, "explicit-token"]) {

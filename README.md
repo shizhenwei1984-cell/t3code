@@ -106,3 +106,22 @@ We have limited review capacity. Small, focused fixes are the most likely to be 
 ## License
 
 [MIT](./LICENSE)
+
+### Personal fork
+
+The `feature/cursor-on-demand` branch adds personal Cursor On-demand spending to
+**Usage → Limits**. It uses the signed-in account's dashboard summary. A missing
+personal cap shows the amount spent without a remaining percentage. Team caps
+are separate.
+
+To merge the newest upstream stable version and publish your customization:
+
+```sh
+git switch feature/cursor-on-demand
+./scripts/sync-upstream.sh --push
+```
+
+Omit `--push` to review locally. Add `--main` to track upstream development
+instead. Start with a clean checkout. If Git reports a conflict, resolve it and
+run `git merge --continue`, or run `git merge --abort`. Syncing updates source;
+rebuild and reinstall when you want to run the new version.
