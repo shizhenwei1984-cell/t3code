@@ -10,14 +10,16 @@ import {
   withOrchestrationProtocolHeader,
 } from "./environmentHttpAuth.ts";
 
-export const fetchEnvironmentThreadTranscript = Effect.fn(
-  "clientRuntime.state.fetchEnvironmentThreadTranscript",
-)(function* (input: {
+interface ThreadRead {
   readonly prepared: PreparedConnection;
   readonly threadId: ThreadId;
   readonly signer: Option.Option<ManagedRelayDpopSigner["Service"]>;
   readonly remoteAuthorization?: Option.Option<RemoteEnvironmentAuthorization["Service"]>;
-}) {
+}
+
+export const fetchEnvironmentThreadTranscript = Effect.fn(
+  "clientRuntime.state.fetchEnvironmentThreadTranscript",
+)(function* (input: ThreadRead) {
   return yield* executeAuthenticatedEnvironmentHttpRequest({
     ...input,
     group: "orchestration",
@@ -31,3 +33,17 @@ export const fetchEnvironmentThreadTranscript = Effect.fn(
       }),
   });
 });
+
+export const fetchEnvironmentThreadToolCallCount = (input: ThreadRead) =>
+  executeAuthenticatedEnvironmentHttpRequest({
+    ...input,
+    group: "orchestration",
+    method: "GET",
+    timeoutMs: 10_000,
+    url: (urls) => urls.threadToolCallCount({ params: { threadId: input.threadId } }),
+    request: ({ client, headers }) =>
+      client.threadToolCallCount({
+        params: { threadId: input.threadId },
+        headers: withOrchestrationProtocolHeader(headers),
+      }),
+  });

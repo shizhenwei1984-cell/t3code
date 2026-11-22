@@ -358,7 +358,10 @@ export interface ChatComposerHandle {
   setMultipleModelSelections: (selections: ReadonlyArray<ModelSelection>) => void;
 }
 
+import type { ReplySpeed } from "./replySpeed";
+
 export interface ChatComposerProps {
+  turnStats?: { speed: ReplySpeed | undefined; calls: number | null };
   composerDraftTarget: ScopedThreadRef | DraftId;
   environmentId: EnvironmentId;
   canOperateThread: boolean;
@@ -504,6 +507,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     supportsAttachmentUploads,
     supportsQuestionAttachments,
     maxFileAttachmentBytes,
+    turnStats,
     routeKind,
     routeThreadRef,
     draftId,
@@ -2504,6 +2508,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       : expandedControlsIconOnlyBlockCount;
   const composerControls = (
     <ComposerControlsBar
+      turnStats={turnStats}
       environmentId={environmentId}
       workspaceCwd={gitCwd}
       routeKind={routeKind}

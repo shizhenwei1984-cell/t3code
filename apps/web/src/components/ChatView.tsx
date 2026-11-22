@@ -258,7 +258,8 @@ import { type TerminalContextDraft } from "../lib/terminalContext";
 import { collectInlineContextIds } from "../lib/composerContextReferences";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
 import { useKnownTerminalSessions, useThreadRunningTerminalIds } from "../state/terminalSessions";
-import { useEnvironmentQueryRefresh } from "../state/query";
+import { orchestrationEnvironment } from "../state/orchestration";
+import { useEnvironmentQuery, useEnvironmentQueryRefresh } from "../state/query";
 import { useEnvironmentScope } from "~/state/session";
 import { primaryServerKeybindingsAtom, serverEnvironment } from "../state/server";
 import { hostEnvironmentIdAtom } from "../state/primaryEnvironment";
@@ -566,6 +567,22 @@ export default function ChatView(props: ChatViewProps) {
     activeProviderThread,
   );
   const serverVisibleTurnItems = useQuietThreadVisibleTurnItems(routeThreadDetailRef);
+  const speedsByMessage = replySpeeds(
+    serverProjection?.runs ?? [],
+    serverProjection?.providerTurns ?? [],
+    serverVisibleTurnItems,
+  );
+  const latestSpeed = Array.from(speedsByMessage.values()).at(-1);
+  const settledRevision =
+    serverProjection?.runs.findLast((run) => run.completedAt != null)?.id ?? null;
+  const toolCallCount = useEnvironmentQuery(
+    routeThreadDetailRef && serverProjection
+      ? orchestrationEnvironment.threadToolCallCount({
+          environmentId: routeThreadDetailRef.environmentId,
+          input: { threadId: routeThreadDetailRef.threadId, settledRevision },
+        })
+      : null,
+  ).data;
   const serverThreadHistory = useThreadHistory(routeThreadDetailRef);
   const threadHistoryControls = (() => {
     if (routeThreadDetailRef === null || !shouldShowLoadEarlierControl(serverThreadHistory)) {
@@ -3552,11 +3569,7 @@ export default function ChatView(props: ChatViewProps) {
                   isPreparingWorktree={isPreparingWorktree}
                   footer={timelineFooter}
                   listRef={legendListRef}
-                  replySpeeds={replySpeeds(
-                    serverProjection?.runs ?? [],
-                    serverProjection?.providerTurns ?? [],
-                    serverVisibleTurnItems,
-                  )}
+                  replySpeeds={speedsByMessage}
                   runs={serverProjection?.runs ?? []}
                   latestRun={activeActivityRun}
                   announcedRun={announcedRun(activeActivityRun, serverProjection?.runs ?? [])}
@@ -3705,6 +3718,10 @@ export default function ChatView(props: ChatViewProps) {
                             ) : null}
                             {!composerMounted ? null : (
                               <ChatComposer
+                                turnStats={{
+                                  speed: latestSpeed,
+                                  calls: routeKind === "draft" ? 0 : toolCallCount,
+                                }}
                                 canOperateThread={canOperateThread}
                                 reportedModelSelection={reportedModelSelection}
                                 multipleModelSelections={multipleModelSelections}

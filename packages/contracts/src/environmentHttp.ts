@@ -778,6 +778,18 @@ class EnvironmentOrchestrationHttpApi extends HttpApiGroup.make("orchestration")
     }).middleware(EnvironmentAuthenticatedAuth),
   )
   .add(
+    HttpApiEndpoint.get(
+      "threadToolCallCount",
+      "/api/orchestration/threads/:threadId/tool-call-count",
+      {
+        headers: OrchestrationProtocolHeaders,
+        params: EnvironmentOrchestrationThreadSnapshotParams,
+        success: Schema.Int,
+        error: EnvironmentOrchestrationThreadSnapshotErrors,
+      },
+    ).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
     HttpApiEndpoint.get("threadTranscript", "/api/orchestration/threads/:threadId/transcript", {
       headers: OrchestrationProtocolHeaders,
       params: EnvironmentOrchestrationThreadSnapshotParams,

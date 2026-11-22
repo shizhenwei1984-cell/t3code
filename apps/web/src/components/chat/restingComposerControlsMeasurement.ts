@@ -84,6 +84,8 @@ export function measureRestingComposerControls(
     picker ?? controls.querySelector<HTMLElement>('[data-chat-provider-unavailable="true"]');
   if (!leadingControl) return null;
   const separator = controls.querySelector<HTMLElement>("[data-resting-controls-separator]");
+  const stats = controls.querySelector<HTMLElement>("[data-composer-turn-stats]");
+  const statsWidth = stats ? elementOuterWidth(stats) + gap : 0;
   const separatorWidth = separator ? elementOuterWidth(separator) : 0;
   const overflow = controls.querySelector<HTMLElement>("[data-resting-controls-overflow]");
   const separatorAndGapWidth = separatorWidth > 0 ? separatorWidth + gap : 0;
@@ -93,10 +95,12 @@ export function measureRestingComposerControls(
     gap,
     naturalFixedWidth:
       (picker ? providerModelPickerNaturalWidth(picker) : elementOuterWidth(leadingControl)) +
-      separatorAndGapWidth,
+      separatorAndGapWidth +
+      statsWidth,
     minimumFixedWidth:
       (picker ? providerModelPickerMinimumWidth(picker) : elementOuterWidth(leadingControl)) +
-      separatorAndGapWidth,
+      separatorAndGapWidth +
+      statsWidth,
     blockWidths: widths.map((width) => width.natural),
     iconOnlyBlockWidths: widths.map((width) => width.iconOnly),
     overflowWidth: overflow ? elementOuterWidth(overflow) : 0,

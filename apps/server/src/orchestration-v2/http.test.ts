@@ -394,3 +394,36 @@ it.effect("leaves older settled threads out of the HTTP shell only when asked", 
     }
   }),
 );
+
+it.effect("counts distinct tool calls across the thread, including failed calls", () =>
+  Effect.gen(function* () {
+    let allowed = true;
+    const { handler, services } = yield* serveOrchestrationHttp(() => allowed);
+    const read = () =>
+      Effect.promise(() =>
+        handler(
+          new Request("http://localhost/api/orchestration/threads/source-thread/tool-call-count", {
+            headers: { [ORCHESTRATION_PROTOCOL_HEADER]: ORCHESTRATION_PROTOCOL_VERSION_TEXT },
+          }),
+        ),
+      );
+    const initial = yield* read();
+    expect(initial.status).toBe(200);
+    expect(yield* Effect.promise(() => initial.json())).toEqual(0);
+    const sql = Context.get(services, SqlClient.SqlClient);
+    for (const [id, threadId, kind, status] of [
+      ["first", thread.id, "tool_call", "completed"],
+      ["second", thread.id, "tool_call", "failed"],
+      ["text", thread.id, "assistant_message", "completed"],
+      ["elsewhere", "other-thread", "tool_call", "completed"],
+    ] as const) {
+      yield* sql`INSERT INTO orchestration_v2_projection_nodes
+        (node_id, thread_id, root_node_id, kind, status, payload_json)
+        VALUES (${id},${threadId},${id},${kind},${status},'{}')`;
+    }
+    const result = yield* read();
+    expect(yield* Effect.promise(() => result.json())).toEqual(2);
+    allowed = false;
+    expect((yield* read()).status).toBe(403);
+  }),
+);

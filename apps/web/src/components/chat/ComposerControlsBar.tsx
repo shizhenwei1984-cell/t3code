@@ -1,3 +1,4 @@
+import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
 import type { ChatComposerProps } from "./ChatComposer";
 import type { PromptUltrathink } from "./TraitsPicker";
 import type { ProviderInstanceEntry } from "../../providerInstances";
@@ -41,6 +42,7 @@ import { resolveComposerControlsOwnership } from "./composerControlsOwnership";
 const MODEL_TRIGGER_STATES = "data-popup-open:bg-accent data-popup-open:text-foreground";
 
 export function ComposerControlsBar(props: {
+  turnStats: ChatComposerProps["turnStats"];
   environmentId: EnvironmentId;
   workspaceCwd: string | null;
   routeKind: ChatComposerProps["routeKind"];
@@ -248,68 +250,95 @@ export function ComposerControlsBar(props: {
       onOpenProviderSetup={onOpenProviderSetup}
     />
   );
-  return showProviderUnavailable ? (
-    <ComposerControl
-      type="button"
-      disabled={!providerSetupInstanceId}
-      onClick={() => {
-        if (providerSetupInstanceId) {
-          onOpenProviderSetup(providerSetupInstanceId);
-        }
-      }}
-      data-chat-provider-unavailable="true"
-      className="shrink-0"
-    >
-      <CircleAlertIcon className="size-4" />
-      {providerSetupInstanceId ? gt("Open provider settings") : gt("No provider available")}
-    </ComposerControl>
-  ) : (
+  const speed = props.turnStats?.speed;
+  const rate = speed && speed.source !== "unavailable" ? speed.value.toFixed(1) : "–";
+  const speedTitle =
+    speed?.source === "native"
+      ? gt("{rate} tok/s · provider", { rate })
+      : speed?.source === "average"
+        ? gt("{rate} tok/s · average", { rate })
+        : gt("Speed unavailable");
+  return (
     <>
-      {composerModelPicker}
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <span
+              data-composer-turn-stats=""
+              className="shrink-0 whitespace-nowrap text-xs tabular-nums text-muted-foreground"
+            />
+          }
+        >
+          {gt("{rate} tok/s · {count} calls", { rate, count: props.turnStats?.calls ?? "–" })}
+        </TooltipTrigger>
+        <TooltipPopup>
+          {speedTitle} · {gt("Tool calls in chat")}
+        </TooltipPopup>
+      </Tooltip>
+      {showProviderUnavailable ? (
+        <ComposerControl
+          type="button"
+          disabled={!providerSetupInstanceId}
+          onClick={() => {
+            if (providerSetupInstanceId) {
+              onOpenProviderSetup(providerSetupInstanceId);
+            }
+          }}
+          data-chat-provider-unavailable="true"
+          className="shrink-0"
+        >
+          <CircleAlertIcon className="size-4" />
+          {providerSetupInstanceId ? gt("Open provider settings") : gt("No provider available")}
+        </ComposerControl>
+      ) : (
+        <>
+          {composerModelPicker}
 
-      <>
-        {restingBlockDefs.map((def, index) => {
-          const hidden = index >= restingBlockDefs.length - restingHiddenBlockCount;
-          return (
+          <>
+            {restingBlockDefs.map((def, index) => {
+              const hidden = index >= restingBlockDefs.length - restingHiddenBlockCount;
+              return (
+                <div
+                  key={def.id}
+                  data-resting-block={def.id}
+                  data-composer-block-icon-only={
+                    index >= restingBlockDefs.length - iconOnlyBlockCount ? "true" : "false"
+                  }
+                  aria-hidden={hidden || undefined}
+                  inert={hidden || undefined}
+                  className={cn(
+                    "flex w-max min-w-max shrink-0 items-center gap-1",
+                    hidden && "pointer-events-none invisible absolute",
+                    index >= restingBlockDefs.length - iconOnlyBlockCount &&
+                      "[&_[data-composer-control-label]]:pointer-events-none [&_[data-composer-control-label]]:invisible [&_[data-composer-control-label]]:absolute [&_[data-composer-control-label]]:w-max [&_[data-composer-control-label]]:max-w-none [&_[data-composer-control-compact-icon]]:[visibility:inherit] [&_[data-composer-control-compact-icon]]:relative",
+                  )}
+                >
+                  {def.content}
+                </div>
+              );
+            })}
             <div
-              key={def.id}
-              data-resting-block={def.id}
-              data-composer-block-icon-only={
-                index >= restingBlockDefs.length - iconOnlyBlockCount ? "true" : "false"
-              }
-              aria-hidden={hidden || undefined}
-              inert={hidden || undefined}
+              data-resting-controls-overflow
+              aria-hidden={hiddenRestingBlockIds.length === 0 || undefined}
+              inert={hiddenRestingBlockIds.length === 0 || undefined}
               className={cn(
-                "flex w-max min-w-max shrink-0 items-center gap-1",
-                hidden && "pointer-events-none invisible absolute",
-                index >= restingBlockDefs.length - iconOnlyBlockCount &&
-                  "[&_[data-composer-control-label]]:pointer-events-none [&_[data-composer-control-label]]:invisible [&_[data-composer-control-label]]:absolute [&_[data-composer-control-label]]:w-max [&_[data-composer-control-label]]:max-w-none [&_[data-composer-control-compact-icon]]:[visibility:inherit] [&_[data-composer-control-compact-icon]]:relative",
+                "min-w-0 shrink-0",
+                hiddenRestingBlockIds.length === 0 && "pointer-events-none invisible absolute",
               )}
             >
-              {def.content}
+              <CompactComposerControlsMenu
+                runtimeMode={compatibleRuntimeMode}
+                runtimeModeOptions={compatibleRuntimeModeOptions}
+                size={controlSize}
+                hidden={composerControlsHidden || hiddenRestingBlockIds.length === 0}
+                // Permissions join the overflow only when their normal home is in it.
+                showPermissions={overflowShowsPermissions}
+                onRuntimeModeChange={handleRuntimeModeChange}
+              />
             </div>
-          );
-        })}
-        <div
-          data-resting-controls-overflow
-          aria-hidden={hiddenRestingBlockIds.length === 0 || undefined}
-          inert={hiddenRestingBlockIds.length === 0 || undefined}
-          className={cn(
-            "min-w-0 shrink-0",
-            hiddenRestingBlockIds.length === 0 && "pointer-events-none invisible absolute",
-          )}
-        >
-          <CompactComposerControlsMenu
-            runtimeMode={compatibleRuntimeMode}
-            runtimeModeOptions={compatibleRuntimeModeOptions}
-            size={controlSize}
-            hidden={composerControlsHidden || hiddenRestingBlockIds.length === 0}
-            // Permissions join the overflow only when their normal home is in it.
-            showPermissions={overflowShowsPermissions}
-            onRuntimeModeChange={handleRuntimeModeChange}
-          />
-        </div>
-      </>
+          </>
+        </>
+      )}
     </>
   );
 }

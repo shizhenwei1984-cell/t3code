@@ -211,6 +211,27 @@ export const layer = HttpApiBuilder.group(
         }),
       )
       .handle(
+        "threadToolCallCount",
+        Effect.fn("environment.orchestration.threadToolCallCount")(function* (args) {
+          yield* annotateEnvironmentRequest(args.endpoint.name);
+          yield* requireEnvironmentScope(AuthOrchestrationReadScope);
+          const rows = yield* sql<{ readonly total: number }>`
+            SELECT COUNT(node.node_id) AS total
+            FROM orchestration_v2_projection_threads AS thread
+            LEFT JOIN orchestration_v2_projection_nodes AS node
+              ON node.thread_id = thread.thread_id AND node.kind = 'tool_call'
+            WHERE thread.thread_id = ${args.params.threadId}
+            GROUP BY thread.thread_id
+          `.pipe(
+            Effect.catch((error) =>
+              failEnvironmentInternal("orchestration_thread_snapshot_failed", error),
+            ),
+          );
+          if (!rows[0]) return yield* failEnvironmentNotFound("thread_not_found");
+          return rows[0].total;
+        }),
+      )
+      .handle(
         "threadTranscript",
         Effect.fn("environment.orchestration.threadTranscript")(function* (args) {
           yield* annotateEnvironmentRequest(args.endpoint.name);
