@@ -1,6 +1,7 @@
 import type {
   MessageId,
   NodeId,
+  ProviderTurnId,
   OrchestrationV2ProviderTurn,
   OrchestrationV2Run,
   RunId,
@@ -12,11 +13,12 @@ export type ReplySpeed =
   | { source: "unavailable" };
 
 type Run = Pick<OrchestrationV2Run, "id" | "rootNodeId" | "status" | "startedAt" | "completedAt">;
-type Turn = Pick<OrchestrationV2ProviderTurn, "nodeId" | "status" | "turnTokenUsage">;
+type Turn = Pick<OrchestrationV2ProviderTurn, "id" | "nodeId" | "status" | "turnTokenUsage">;
 interface Item {
   type: string;
   runId: RunId | null;
   nodeId: NodeId | null;
+  providerTurnId?: ProviderTurnId | null;
   status?: string;
   messageId?: MessageId;
   message?: string;
@@ -31,6 +33,7 @@ export function replySpeeds(
   const completed = new Map(
     runs.filter((run) => run.status === "completed").map((run) => [run.id, run]),
   );
+  const turnOwners = new Map(turns.map((turn) => [turn.id, turn.nodeId]));
   const totals = new Map<NodeId, number | null>();
   for (const turn of turns) {
     const usage = turn.turnTokenUsage;
@@ -47,7 +50,10 @@ export function replySpeeds(
   for (const { item } of visible) {
     if (!item.runId) continue;
     const run = completed.get(item.runId);
-    if (!run || (item.nodeId !== null && item.nodeId !== run.rootNodeId)) continue;
+    if (!run) continue;
+    // Message and notice nodes identify individual items. The provider turn identifies their agent.
+    const owner = item.providerTurnId ? turnOwners.get(item.providerTurnId) : item.nodeId;
+    if (owner != null && owner !== run.rootNodeId) continue;
     if (item.type === "assistant_message" && item.status === "completed" && item.messageId) {
       replies.set(item.runId, item.messageId);
     }

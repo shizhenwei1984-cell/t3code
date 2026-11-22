@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import * as DateTime from "effect/DateTime";
-import { MessageId, NodeId, RunId } from "@t3tools/contracts";
+import { MessageId, NodeId, ProviderTurnId, RunId } from "@t3tools/contracts";
 import { replySpeeds } from "./replySpeed";
 
 const id = RunId.make("run");
@@ -23,6 +23,7 @@ const reply = {
   },
 } as const;
 const turn = {
+  id: ProviderTurnId.make("root-turn"),
   nodeId: rootNodeId,
   status: "completed",
   turnTokenUsage: {
@@ -38,10 +39,31 @@ describe("reply output speed", () => {
   it("uses full run wall time and only complete main-agent output, once on the final reply", () => {
     const speeds = replySpeeds(
       [run],
-      [turn, { ...turn, nodeId: NodeId.make("child") }],
+      [turn, { ...turn, id: ProviderTurnId.make("child-turn"), nodeId: NodeId.make("child") }],
       [{ item: { ...reply.item, messageId: MessageId.make("earlier") } }, reply],
     );
     expect([...speeds]).toEqual([[messageId, { source: "average", value: 20 }]]);
+  });
+  it("joins native message nodes to the main agent through their provider turn", () => {
+    const item = { ...reply.item, nodeId: NodeId.make("native-message"), providerTurnId: turn.id };
+    expect(replySpeeds([run], [turn], [{ item }]).get(messageId)).toEqual({
+      source: "average",
+      value: 20,
+    });
+    const child = { ...turn, id: ProviderTurnId.make("child"), nodeId: NodeId.make("subagent") };
+    const notice = {
+      item: {
+        type: "system_notice",
+        runId: id,
+        nodeId: NodeId.make("native-notice"),
+        providerTurnId: child.id,
+        message: "TPS 99 tok/s",
+      },
+    };
+    expect(replySpeeds([run], [turn, child], [{ item }, notice]).get(messageId)).toEqual({
+      source: "average",
+      value: 20,
+    });
   });
   it("prefers a provider performance notice over calculated speed", () => {
     const notice = {
