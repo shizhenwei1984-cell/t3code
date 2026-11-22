@@ -1,3 +1,4 @@
+import type { ReplySpeed } from "./replySpeed";
 import type { ToolCallDiffTarget } from "../../diffPanelStore";
 import type {
   ProviderApprovalDecision,
@@ -61,6 +62,7 @@ export interface TimelineRowSharedState {
   resolvedTheme: "light" | "dark";
   workspaceRoot: string | undefined;
   skills: ReadonlyArray<ServerProviderSkill>;
+  replySpeeds?: ReadonlyMap<MessageId, ReplySpeed> | undefined;
   runs: ReadonlyArray<HandoffTimelineRun>;
   activeThreadEnvironmentId: EnvironmentId;
   onRevertToTurnCount: (targetTurnCount: number, messageId: MessageId) => void;

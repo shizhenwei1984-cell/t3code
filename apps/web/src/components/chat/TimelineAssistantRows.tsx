@@ -231,12 +231,14 @@ function AssistantMessageMeta({
 }) {
   const ctx = use(TimelineRowCtx);
   const m = useMessages();
+  const gt = useGT();
+  const speed = !message.streaming && ctx.replySpeeds?.get(message.id);
 
   return (
     <div
       className={cn(
         "flex items-center gap-2 text-xs tabular-nums transition-opacity duration-200",
-        alwaysVisible
+        alwaysVisible || speed
           ? "opacity-100"
           : "opacity-0 pointer-coarse:opacity-100 focus-within:opacity-100 group-hover/assistant:opacity-100",
         className,
@@ -271,6 +273,15 @@ function AssistantMessageMeta({
             {formatChatTimestampTooltip(message.updatedAt, ctx.timestampFormat, m)}
           </TooltipPopup>
         </Tooltip>
+      )}
+      {speed && (
+        <span className="text-muted-foreground" data-testid="reply-output-speed">
+          {speed.source === "unavailable"
+            ? gt("Speed unavailable")
+            : speed.source === "native"
+              ? gt("{rate} tok/s · provider", { rate: speed.value.toFixed(1) })
+              : gt("{rate} tok/s · average", { rate: speed.value.toFixed(1) })}
+        </span>
       )}
     </div>
   );

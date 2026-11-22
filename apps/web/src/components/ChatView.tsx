@@ -301,6 +301,7 @@ import {
 } from "./chat/ChatOverlayHosts";
 import type { AssistantCitationRequest } from "./chat/AssistantCitationSource";
 import { useCitedHistory } from "./chat/citationProcedure";
+import { replySpeeds } from "./chat/replySpeed";
 import type { MessagesTimelineHistoryControls } from "./chat/MessagesTimeline";
 import { ThreadTimeline } from "./chat/ThreadTimeline";
 import { NativeChildWorkDialog } from "./chat/NativeChildWorkDialog";
@@ -3551,6 +3552,11 @@ export default function ChatView(props: ChatViewProps) {
                   isPreparingWorktree={isPreparingWorktree}
                   footer={timelineFooter}
                   listRef={legendListRef}
+                  replySpeeds={replySpeeds(
+                    serverProjection?.runs ?? [],
+                    serverProjection?.providerTurns ?? [],
+                    serverVisibleTurnItems,
+                  )}
                   runs={serverProjection?.runs ?? []}
                   latestRun={activeActivityRun}
                   announcedRun={announcedRun(activeActivityRun, serverProjection?.runs ?? [])}

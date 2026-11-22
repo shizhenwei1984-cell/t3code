@@ -308,6 +308,7 @@ interface MessagesTimelineProps {
   timestampFormat: TimestampFormat;
   workspaceRoot: string | undefined;
   skills?: ReadonlyArray<ServerProviderSkill>;
+  replySpeeds?: TimelineRowSharedState["replySpeeds"];
   runs: ReadonlyArray<HandoffTimelineRun>;
   anchorMessageId: MessageId | null;
   onAnchorReady: (messageId: MessageId, anchorIndex: number) => void;
@@ -411,6 +412,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
   workspaceRoot,
   skills = EMPTY_TIMELINE_SKILLS,
   runs: runsProp,
+  replySpeeds,
   anchorMessageId,
   onAnchorReady,
   onAnchorSizeChanged,
@@ -1119,6 +1121,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
     workspaceRoot,
     skills,
     runs,
+    replySpeeds,
     activeThreadEnvironmentId,
     onRevertToTurnCount,
     onRunShellCommand,
