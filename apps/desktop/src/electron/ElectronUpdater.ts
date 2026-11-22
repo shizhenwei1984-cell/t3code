@@ -1,5 +1,6 @@
-import * as NodeChildProcess from "node:child_process";
-import * as NodeUtil from "node:util";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -165,26 +166,30 @@ export const make = ElectronUpdater.of({
       catch: (cause) => new ElectronUpdaterCheckForUpdatesError({ channel, cause }),
     }).pipe(Effect.asVoid);
   }),
-  runPersonalUpdate: (launcher) =>
-    Effect.tryPromise({
-      // A separate user service survives the desktop being stopped during activation.
-      try: () =>
-        NodeUtil.promisify(NodeChildProcess.execFile)("systemd-run", [
-          "--user",
-          "--collect",
-          "--wait",
-          "--unit=t3-personal-update",
-          launcher,
-        ]),
-      catch: (cause) =>
-        new ElectronUpdaterDownloadUpdateError({
-          channel: "latest",
-          cause: new Error(
-            "Personal update failed. See journalctl --user -u t3-personal-update.service",
-            { cause },
-          ),
-        }),
-    }).pipe(Effect.asVoid),
+  runPersonalUpdate: Effect.fn("ElectronUpdater.runPersonalUpdate")(function* (launcher: string) {
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    // The transient service must survive its parent desktop stopping during activation.
+    const code = yield* spawner
+      .exitCode(
+        ChildProcess.make(
+          "systemd-run",
+          ["--user", "--collect", "--wait", "--unit=t3-personal-update", launcher],
+          { stdout: "ignore", stderr: "ignore" },
+        ),
+      )
+      .pipe(
+        Effect.mapError(
+          (cause) => new ElectronUpdaterDownloadUpdateError({ channel: "latest", cause }),
+        ),
+      );
+    if (code !== 0)
+      return yield* new ElectronUpdaterDownloadUpdateError({
+        channel: "latest",
+        cause: new Error(
+          "Personal update failed. See journalctl --user -u t3-personal-update.service",
+        ),
+      });
+  }, Effect.provide(NodeServices.layer)),
   downloadUpdate: Effect.suspend(() => {
     const channel = autoUpdater.channel;
     return Effect.tryPromise({
