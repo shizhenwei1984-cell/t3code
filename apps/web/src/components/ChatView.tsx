@@ -393,6 +393,7 @@ import { useDraftEnvironmentRouting } from "./chat/useDraftEnvironmentRouting";
 import { branchMismatchBannerItem, extensionStatusBannerItem } from "./chat/ThreadActivityBanners";
 import { ThreadNow } from "./chat/ThreadNow";
 import type { ThreadStructure } from "@t3tools/client-runtime/state/shell";
+import { useThreadToolCallCount } from "../hooks/useThreadToolCallCount";
 import { useDelayedStatus } from "../hooks/useDelayedStatus";
 import { useTimelineFollow } from "./chat/useTimelineFollow";
 import {
@@ -575,14 +576,15 @@ export default function ChatView(props: ChatViewProps) {
   const latestSpeed = Array.from(speedsByMessage.values()).at(-1);
   const settledRevision =
     serverProjection?.runs.findLast((run) => run.completedAt != null)?.id ?? null;
-  const toolCallCount = useEnvironmentQuery(
+  const toolCallCountQuery = useEnvironmentQuery(
     routeThreadDetailRef && serverProjection
       ? orchestrationEnvironment.threadToolCallCount({
           environmentId: routeThreadDetailRef.environmentId,
           input: { threadId: routeThreadDetailRef.threadId, settledRevision },
         })
       : null,
-  ).data;
+  );
+  const toolCallCount = useThreadToolCallCount(routeThreadKey, toolCallCountQuery.data);
   const serverThreadHistory = useThreadHistory(routeThreadDetailRef);
   const threadHistoryControls = (() => {
     if (routeThreadDetailRef === null || !shouldShowLoadEarlierControl(serverThreadHistory)) {
