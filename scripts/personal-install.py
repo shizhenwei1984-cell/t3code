@@ -27,6 +27,13 @@ def copy_tree(source, destination):
     run("cp", "-a", "--reflink=auto", "--", source, destination)
 
 
+def personal_unit(unit):
+    # A binary started in a terminal may share the terminal or IDE's scope.
+    return unit in {"t3-personal-managed.service", "t3-personal-verified.service"} or bool(
+        re.fullmatch(r"app-(?:com\.t3tools\.T3Code|(?:gnome-)?t3code-personal)-[0-9]+\.scope", unit)
+    )
+
+
 class Desktop:
     unit = "t3-personal-managed.service"
 
@@ -50,7 +57,7 @@ class Desktop:
             if exe != (release / "t3code").resolve():
                 raise RuntimeError("Personal runtime reports a different executable. Close the personal desktop first.")
             unit = (proc / "cgroup").read_text().splitlines()[-1].rsplit("/", 1)[-1]
-            if not re.fullmatch(r"(?:app-[\w.\\-]+\.scope|t3-personal-[\w-]+\.service)", unit):
+            if not personal_unit(unit):
                 raise RuntimeError("Close the personal desktop before updating its unmanaged process.")
         if check_busy:
             db = self.profile / "userdata/statev2.sqlite"
@@ -131,7 +138,8 @@ if __name__ == "__main__":
     runtime = Desktop(profile)
     pending = backups / "pending"
     if pending.exists():
-        restore(current, profile, pending.resolve(strict=True), runtime, check_busy=True)
+        restore(current, profile, pending.resolve(strict=True), runtime,
+                check_busy=(profile / "userdata/statev2.sqlite").is_file())
         pending.unlink()
         print("Recovered interrupted update. Run the update again to install.")
         sys.exit(1)

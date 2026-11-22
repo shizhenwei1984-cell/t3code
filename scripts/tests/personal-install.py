@@ -58,6 +58,12 @@ class ActivationTest(unittest.TestCase):
         displaced, = self.backups.glob("restore-*/displaced-profile/session")
         self.assertEqual(displaced.read_text(), "new session")
 
+    def test_never_stops_an_unrelated_desktop_or_terminal_scope(self):
+        self.assertTrue(install.personal_unit("app-com.t3tools.T3Code-123.scope"))
+        self.assertTrue(install.personal_unit("t3-personal-managed.service"))
+        self.assertFalse(install.personal_unit("app-org.gnome.Terminal-123.scope"))
+        self.assertFalse(install.personal_unit("app-com.openai.Codex-123.scope"))
+
     def test_busy_app_is_left_alone(self):
         self.runtime.stop.side_effect = RuntimeError("busy")
         with self.assertRaisesRegex(RuntimeError, "busy"):
