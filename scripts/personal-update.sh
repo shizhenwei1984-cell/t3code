@@ -53,6 +53,7 @@ vp run check:changed "$tag"
 (cd packages/provider-cursor && vp test run src/server/usageLimits.test.ts)
 (cd apps/web && vp build)
 (cd apps/server && vp pack)
+(cd apps/desktop && node scripts/build-preview-annotation-css.mjs && vp pack)
 asset="T3-Code-${tag#v}-amd64.deb"
 digest=$(gh release view "$tag" --repo "$upstream" --json assets --jq ".assets[] | select(.name == \"$asset\") | .digest")
 [[ $digest =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "Missing upstream Debian asset digest." >&2; exit 1; }
@@ -70,6 +71,7 @@ app="$work/deb/opt/T3 Code (Beta)"
 resources="$app/resources"
 asar="$repo/scripts/node_modules/.bin/asar"
 "$asar" extract "$resources/app.asar" "$work/bundle"
+cp apps/desktop/dist-electron/main.cjs "$work/bundle/apps/desktop/dist-electron/main.cjs"
 dist="$work/bundle/apps/server/dist"
 [[ -f "$dist/bin.mjs" && -f "$dist/client/index.html" && -f apps/web/dist/index.html ]]
 find "$dist" -maxdepth 1 -name '*.mjs' -delete

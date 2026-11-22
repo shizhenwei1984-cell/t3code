@@ -80,6 +80,35 @@ const stableUpdateInfo = (
 };
 
 describe("DesktopUpdates", () => {
+  it.effect(
+    "personal builds offer only newer stable bases and download through the personal updater",
+    () => {
+      const harness = makeHarness({
+        platform: "linux",
+        packageType: "deb",
+        appVersion: "0.1.11-personal.gabc123",
+      });
+      return Effect.scoped(
+        Effect.gen(function* () {
+          const updates = yield* DesktopUpdates.DesktopUpdates;
+          yield* updates.configure;
+          for (const version of ["0.1.11", "0.1.9", "0.1.12-nightly.20261123.1"]) {
+            harness.emit("update-available", { version });
+            yield* flushCallbacks;
+            assert.notEqual((yield* updates.getState).status, "available");
+          }
+          harness.emit("update-available", { version: "0.1.12" });
+          yield* flushCallbacks;
+          assert.equal((yield* updates.getState).status, "available");
+          assert.equal(harness.personalDownloads.length, 0);
+          yield* updates.download;
+          assert.equal(harness.personalDownloads.length, 1);
+          assert.equal(harness.downloadCount(), 0);
+        }),
+      ).pipe(Effect.provide(harness.layer));
+    },
+  );
+
   it.effect("updates Linux .deb installs and leaves other non-AppImage installs off", () =>
     Effect.gen(function* () {
       const linuxState = (packageType: string | undefined) =>

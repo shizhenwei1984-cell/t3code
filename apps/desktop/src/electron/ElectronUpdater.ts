@@ -1,3 +1,5 @@
+import * as NodeChildProcess from "node:child_process";
+import * as NodeUtil from "node:util";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -88,6 +90,9 @@ export class ElectronUpdater extends Context.Service<
     readonly setFullChangelog: (value: boolean) => Effect.Effect<void>;
     readonly setDisableDifferentialDownload: (value: boolean) => Effect.Effect<void>;
     readonly checkForUpdates: Effect.Effect<void, ElectronUpdaterCheckForUpdatesError>;
+    readonly runPersonalUpdate: (
+      launcher: string,
+    ) => Effect.Effect<void, ElectronUpdaterDownloadUpdateError>;
     readonly downloadUpdate: Effect.Effect<void, ElectronUpdaterDownloadUpdateError>;
     readonly quitAndInstall: (options: {
       readonly isSilent: boolean;
@@ -160,6 +165,26 @@ export const make = ElectronUpdater.of({
       catch: (cause) => new ElectronUpdaterCheckForUpdatesError({ channel, cause }),
     }).pipe(Effect.asVoid);
   }),
+  runPersonalUpdate: (launcher) =>
+    Effect.tryPromise({
+      // A separate user service survives the desktop being stopped during activation.
+      try: () =>
+        NodeUtil.promisify(NodeChildProcess.execFile)("systemd-run", [
+          "--user",
+          "--collect",
+          "--wait",
+          "--unit=t3-personal-update",
+          launcher,
+        ]),
+      catch: (cause) =>
+        new ElectronUpdaterDownloadUpdateError({
+          channel: "latest",
+          cause: new Error(
+            "Personal update failed. See journalctl --user -u t3-personal-update.service",
+            { cause },
+          ),
+        }),
+    }).pipe(Effect.asVoid),
   downloadUpdate: Effect.suspend(() => {
     const channel = autoUpdater.channel;
     return Effect.tryPromise({

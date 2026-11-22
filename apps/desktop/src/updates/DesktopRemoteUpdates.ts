@@ -1,3 +1,4 @@
+import { personalStableBase } from "./updateChannels.ts";
 import type {
   DesktopTelemetryRequestDesktopUpdate,
   DesktopUpdateRemoteOutcome,
@@ -291,6 +292,19 @@ export const listen: Effect.Effect<
               );
               return false;
             case "download":
+              // Preparing a remote update must never restart the desktop before commit.
+              if (personalStableBase(state.currentVersion) !== undefined) {
+                yield* publishReport(
+                  state,
+                  {
+                    outcome: "failed",
+                    reason:
+                      "Use Download update on the personal desktop to rebuild and install it.",
+                  },
+                  request.requestId,
+                );
+                return true;
+              }
               attempts = { ...attempts, downloads: attempts.downloads + 1 };
               yield* updates.download.pipe(
                 Effect.flatMap((result) => {

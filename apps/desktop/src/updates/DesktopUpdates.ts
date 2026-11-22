@@ -38,6 +38,7 @@ import * as ElectronWindow from "../electron/ElectronWindow.ts";
 import * as IpcChannels from "../ipc/channels.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopSshEnvironment from "../ssh/DesktopSshEnvironment.ts";
+import { personalStableBase } from "./updateChannels.ts";
 import * as DesktopUpdatePolicy from "./DesktopUpdatePolicy.ts";
 import {
   normalizeDesktopUpdateReleaseNotes,
@@ -400,10 +401,14 @@ export const make = Effect.gen(function* () {
   // through such a switch, and never below that release: version order alone cannot tell whether
   // a Stable knows a Nightly's migrations.
   const releaseFloorRef = yield* Ref.make(Option.none<string>());
+  const personalBase = personalStableBase(environment.appVersion);
   const offerable = (version: string, state: DesktopUpdateState) =>
     Ref.get(releaseFloorRef).pipe(
       Effect.map(
         (floor) =>
+          (personalBase === undefined ||
+            (/^\d+\.\d+\.\d+$/.test(version) &&
+              compareSemverVersions(version, personalBase) > 0)) &&
           desktopUpdateChannelOf(version) === state.channel &&
           (Option.isSome(floor)
             ? compareSemverVersions(version, floor.value) >= 0
@@ -681,7 +686,13 @@ export const make = Effect.gen(function* () {
         isArm64HostRunningIntelBuild(environment.runtimeInfo),
       );
       yield* logUpdaterInfo("downloading update");
-      yield* electronUpdater.downloadUpdate;
+      if (personalBase !== undefined) {
+        yield* electronUpdater.runPersonalUpdate(
+          environment.path.join(environment.homeDirectory, ".local/bin/t3code-personal-update"),
+        );
+      } else {
+        yield* electronUpdater.downloadUpdate;
+      }
       return { accepted: true, completed: true };
     }).pipe(
       Effect.catchTags({

@@ -50,6 +50,7 @@ export function makeHarness(options: UpdatesHarnessOptions = {}) {
   let checkCount = 0;
   let quitAndInstallCount = 0;
   let downloadCount = 0;
+  const personalDownloads: string[] = [];
   let allowDowngrade = false;
   const checkAllowedDowngrade: boolean[] = [];
   let fullChangelog = false;
@@ -98,6 +99,10 @@ export function makeHarness(options: UpdatesHarnessOptions = {}) {
       checkCount += 1;
       checkAllowedDowngrade.push(allowDowngrade);
     }).pipe(Effect.andThen(options.checkForUpdates ?? Effect.void)),
+    runPersonalUpdate: (launcher) =>
+      Effect.sync(() => {
+        personalDownloads.push(launcher);
+      }),
     downloadUpdate: Effect.sync(() => {
       downloadCount += 1;
     }).pipe(Effect.andThen(options.downloadUpdate ?? Effect.void)),
@@ -321,6 +326,7 @@ export function makeHarness(options: UpdatesHarnessOptions = {}) {
       [...updateMarkerContents].find(([path]) => path.endsWith("/desktop-update-in-progress"))?.[1],
     installRecords,
     previousInstallRecord: () => previousInstallRecord,
+    personalDownloads,
     downloadCount: () => downloadCount,
     feedUrls: (): ElectronUpdater.ElectronUpdaterFeedUrl[] => feedUrls,
     fullChangelog: () => fullChangelog,
