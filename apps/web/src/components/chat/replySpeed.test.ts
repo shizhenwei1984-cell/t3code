@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import * as DateTime from "effect/DateTime";
 import { MessageId, NodeId, RunId } from "@t3tools/contracts";
 import { replySpeeds } from "./replySpeed";
