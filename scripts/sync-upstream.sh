@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # Merge upstream into this fork's customization branch, retaining personal commits.
 set -euo pipefail
+if [[ ${1:-} == --install || ${1:-} == --rollback ]]; then
+  exec "$(dirname "$0")/personal-update.sh" "$@"
+fi
 main=false
 push=false
 for arg in "$@"; do
   case "$arg" in
     --main) main=true ;;
     --push) push=true ;;
-    -h|--help) echo "Usage: scripts/sync-upstream.sh [--main] [--push]"; exit 0 ;;
+    -h|--help) echo "Usage: scripts/sync-upstream.sh [--main] [--push] | --install [--push] | --rollback"; exit 0 ;;
     *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -22,8 +25,8 @@ if "$main"; then
   git fetch upstream refs/heads/main:refs/remotes/upstream/main
   target=refs/remotes/upstream/main
 else
-  latest=$(git ls-remote --tags --refs upstream 'v*' | awk -F/ '$NF ~ /^v[0-9]+\.[0-9]+\.[0-9]+$/ {print $NF}' | sort -V | tail -n 1)
-  [[ -n $latest ]] || { echo "Upstream has no stable version tag." >&2; exit 1; }
+  latest=${T3_PERSONAL_STABLE_TAG:-$(git ls-remote --tags --refs upstream 'v*' | awk -F/ '$NF ~ /^v[0-9]+\.[0-9]+\.[0-9]+$/ {print $NF}' | sort -V | tail -n 1)}
+  [[ $latest =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Upstream has no stable version tag." >&2; exit 1; }
   target=refs/tags/$latest
   git fetch upstream "$target:$target"
 fi

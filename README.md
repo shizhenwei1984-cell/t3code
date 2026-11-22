@@ -125,3 +125,22 @@ Omit `--push` to review locally. Add `--main` to track upstream development
 instead. Start with a clean checkout. If Git reports a conflict, resolve it and
 run `git merge --continue`, or run `git merge --abort`. Syncing updates source;
 rebuild and reinstall when you want to run the new version.
+
+On the configured Linux x86_64 personal desktop, run `t3code-personal-update`
+(or `./scripts/sync-upstream.sh --install`) to sync the latest stable GitHub
+release, install locked dependencies, test the fork, rebuild the client and server,
+and install them with that release's checksum-verified Electron shell and native
+dependencies. Add `--push` to publish the tested branch after activation. Start
+from a clean customization branch and finish any active turns first.
+
+The launcher follows `~/.local/opt/t3code-personal-current`. Activation stops
+only the personal desktop, takes a private offline snapshot of its full profile,
+then starts the new release on the same profile. A failed startup restores the
+previous binary and profile. Building and testing happen before this switch.
+Re-run after an interruption to recover a pending switch.
+
+Use `t3code-personal-update --rollback` (or `./scripts/sync-upstream.sh --rollback`)
+to return to the pre-update release and session snapshot. The displaced profile,
+including conversations created after the update, is kept in the printed restore
+directory. Backups under `~/.local/state/t3code-personal-updates` contain account
+credentials and conversations. The official desktop has its own profile.
