@@ -133,16 +133,11 @@ export function accumulateCodexTurnTokenUsage(
   }
 }
 
-/** `model` is the thread model Codex last reported, which a reroute replaces. */
-export function completeCodexTurnTokenUsage(
-  state: CodexTurnTokenUsageState,
-  turnId: string,
-  completed: boolean,
+function codexTurnTokenUsageSnapshot(
+  usage: CodexTurnTokenUsageAccumulator | undefined,
+  usageStatus: "complete" | "partial",
   model?: string,
 ): TurnTokenUsage {
-  const usage = state.byTurnId.get(turnId);
-  state.byTurnId.delete(turnId);
-  if (state.activeTurnId === turnId) state.activeTurnId = undefined;
   const models = model === undefined ? {} : { models: [model] };
   if (!usage?.observed) {
     return {
@@ -155,7 +150,7 @@ export function completeCodexTurnTokenUsage(
 
   // Codex counts cache reads and writes inside inputTokens.
   return {
-    usageStatus: completed ? "complete" : "partial",
+    usageStatus,
     usageScope: "main_agent",
     inputTokens: usage.inputTokens,
     cachedInputTokens: Math.min(usage.inputTokens, usage.cachedInputTokens),
@@ -167,4 +162,24 @@ export function completeCodexTurnTokenUsage(
     hasSubagents: usage.hasSubagents,
     ...models,
   };
+}
+
+export function snapshotCodexTurnTokenUsage(
+  state: CodexTurnTokenUsageState,
+  turnId: string,
+): TurnTokenUsage {
+  return codexTurnTokenUsageSnapshot(state.byTurnId.get(turnId), "partial");
+}
+
+/** `model` is the thread model Codex last reported, which a reroute replaces. */
+export function completeCodexTurnTokenUsage(
+  state: CodexTurnTokenUsageState,
+  turnId: string,
+  completed: boolean,
+  model?: string,
+): TurnTokenUsage {
+  const usage = state.byTurnId.get(turnId);
+  state.byTurnId.delete(turnId);
+  if (state.activeTurnId === turnId) state.activeTurnId = undefined;
+  return codexTurnTokenUsageSnapshot(usage, completed ? "complete" : "partial", model);
 }

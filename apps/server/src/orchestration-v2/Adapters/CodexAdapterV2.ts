@@ -13,6 +13,7 @@ import {
   getCodexTurnAccumulator,
   accumulateCodexTurnTokenUsage,
   completeCodexTurnTokenUsage,
+  snapshotCodexTurnTokenUsage,
   type CodexTurnTokenUsageState,
 } from "../../provider/CodexTurnTokenUsage.ts";
 import type { ManagedServerProvider } from "@t3tools/provider-core/server/snapshot";
@@ -5041,11 +5042,8 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
 
         yield* client.handleServerNotification("thread/tokenUsage/updated", (payload) =>
           Effect.gen(function* () {
-            accumulateCodexTurnTokenUsage(
-              usageStateForThread(payload.threadId),
-              payload.turnId,
-              payload.tokenUsage,
-            );
+            const usageState = usageStateForThread(payload.threadId);
+            accumulateCodexTurnTokenUsage(usageState, payload.turnId, payload.tokenUsage);
             const context = yield* awaitActiveTurn(payload.turnId);
             if (context === undefined) {
               return;
@@ -5073,6 +5071,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                   payload.tokenUsage,
                   DateTime.formatIso(now),
                 ),
+                turnTokenUsage: snapshotCodexTurnTokenUsage(usageState, payload.turnId),
               },
             });
           }).pipe(Effect.orDie),

@@ -358,10 +358,11 @@ export interface ChatComposerHandle {
   setMultipleModelSelections: (selections: ReadonlyArray<ModelSelection>) => void;
 }
 
-import type { ReplySpeed } from "./replySpeed";
+import type { ComposerReplySpeed } from "./replySpeed";
+import { useComposerReplySpeed } from "./useComposerReplySpeed";
 
 export interface ChatComposerProps {
-  turnStats?: { speed: ReplySpeed | undefined; calls: number | null };
+  turnStats?: { speed: ComposerReplySpeed; calls: number | null };
   composerDraftTarget: ScopedThreadRef | DraftId;
   environmentId: EnvironmentId;
   canOperateThread: boolean;
@@ -585,6 +586,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     editingQueuedAttachments,
     onRemoveEditingQueuedAttachment,
   } = props;
+  const replySpeed = useComposerReplySpeed(turnStats?.speed);
   const {
     activePendingProgress: incomingPendingProgress,
     activePendingResolvedAnswers,
@@ -2508,7 +2510,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       : expandedControlsIconOnlyBlockCount;
   const composerControls = (
     <ComposerControlsBar
-      turnStats={turnStats}
+      replySpeed={replySpeed}
+      toolCallCount={turnStats?.calls ?? null}
       environmentId={environmentId}
       workspaceCwd={gitCwd}
       routeKind={routeKind}

@@ -32,6 +32,7 @@ import {
 } from "./ComposerModelEffort";
 import type { useComposerProviderModel } from "./useComposerProviderModel";
 import { resolveComposerControlsOwnership } from "./composerControlsOwnership";
+import type { LiveReplySpeed, ReplySpeed } from "./replySpeed";
 
 /**
  * The composer footer controls: the model picker (which also holds effort, speed and
@@ -42,7 +43,8 @@ import { resolveComposerControlsOwnership } from "./composerControlsOwnership";
 const MODEL_TRIGGER_STATES = "data-popup-open:bg-accent data-popup-open:text-foreground";
 
 export function ComposerControlsBar(props: {
-  turnStats: ChatComposerProps["turnStats"];
+  replySpeed: ReplySpeed | LiveReplySpeed | undefined;
+  toolCallCount: number | null;
   environmentId: EnvironmentId;
   workspaceCwd: string | null;
   routeKind: ChatComposerProps["routeKind"];
@@ -250,14 +252,16 @@ export function ComposerControlsBar(props: {
       onOpenProviderSetup={onOpenProviderSetup}
     />
   );
-  const speed = props.turnStats?.speed;
+  const speed = props.replySpeed;
   const rate = speed && speed.source !== "unavailable" ? speed.value.toFixed(1) : "–";
   const speedTitle =
     speed?.source === "native"
       ? gt("{rate} tok/s · provider", { rate })
       : speed?.source === "average"
         ? gt("{rate} tok/s · average", { rate })
-        : gt("Speed unavailable");
+        : speed?.source === "live"
+          ? gt("{rate} tok/s · live estimate", { rate })
+          : gt("Speed unavailable");
   return (
     <>
       <Tooltip>
@@ -269,7 +273,7 @@ export function ComposerControlsBar(props: {
             />
           }
         >
-          {gt("{rate} tok/s · {count} calls", { rate, count: props.turnStats?.calls ?? "–" })}
+          {gt("{rate} tok/s · {count} calls", { rate, count: props.toolCallCount ?? "–" })}
         </TooltipTrigger>
         <TooltipPopup>
           {speedTitle} · {gt("Tool calls in chat")}

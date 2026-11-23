@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import * as DateTime from "effect/DateTime";
-import { MessageId, NodeId, ProviderTurnId, RunId } from "@t3tools/contracts";
-import { replySpeeds } from "./replySpeed";
+import { MessageId, NodeId, ProviderTurnId, RunAttemptId, RunId } from "@t3tools/contracts";
+import { composerReplySpeed, createLiveReplySpeed, replySpeeds } from "./replySpeed";
 
 const id = RunId.make("run");
 const rootNodeId = NodeId.make("root");
@@ -92,5 +92,131 @@ describe("reply output speed", () => {
         [reply],
       ).get(messageId),
     ).toEqual({ source: "average", value: 0 });
+  });
+});
+
+describe("live composer speed", () => {
+  it("uses the running root provider turn and restores the completed speed when it settles", () => {
+    const attemptId = RunAttemptId.make("attempt");
+    const active = { ...run, status: "running", activeAttemptId: attemptId } as const;
+    const updatedAt = "2026-11-23T00:00:00.000Z";
+    const runningTurn = {
+      ...turn,
+      ordinal: 1,
+      runAttemptId: attemptId,
+      status: "running",
+      tokenUsage: { usedTokens: 9, outputTokens: 3, updatedAt },
+      turnTokenUsage: { ...turn.turnTokenUsage, usageStatus: "partial" },
+    } as const;
+    const child = { ...runningTurn, ordinal: 2, nodeId: NodeId.make("child"), runAttemptId: null };
+    const speed = { source: "average", value: 20 } as const;
+    expect(
+      composerReplySpeed({
+        threadKey: "thread",
+        runs: [active],
+        turns: [child],
+        settledSpeed: speed,
+      }),
+    ).toEqual({ kind: "live", observation: null });
+    const input = {
+      threadKey: "thread",
+      runs: [active],
+      turns: [runningTurn, child],
+      settledSpeed: speed,
+    };
+    const live = composerReplySpeed(input);
+    expect(live).toMatchObject({
+      kind: "live",
+      observation: { sample: { outputTokens: 80, reportedAt: Date.parse(updatedAt) } },
+    });
+    expect(composerReplySpeed({ ...input, threadKey: "another-thread" })).not.toEqual(live);
+    expect(
+      composerReplySpeed({
+        ...input,
+        turns: [{ ...runningTurn, id: ProviderTurnId.make("continued-turn"), ordinal: 2 }],
+      }),
+    ).not.toEqual(live);
+    expect(
+      composerReplySpeed({
+        ...input,
+        runs: [{ ...active, id: RunId.make("another-run") }],
+      }),
+    ).not.toEqual(live);
+    expect(composerReplySpeed({ ...input, runs: [{ ...run, activeAttemptId: null }] })).toEqual({
+      kind: "settled",
+      speed,
+    });
+  });
+
+  it("coalesces a burst for 1500 ms and expires after eight seconds without output", () => {
+    vi.useFakeTimers();
+    const display = vi.fn();
+    try {
+      const live = createLiveReplySpeed(display);
+      live.observe({ reportedAt: 1000, outputTokens: 10 });
+      vi.advanceTimersByTime(500);
+      live.observe({ reportedAt: 1500, outputTokens: 20 });
+      vi.advanceTimersByTime(500);
+      live.observe({ reportedAt: 2000, outputTokens: 50 });
+      vi.advanceTimersByTime(1499);
+      expect(display).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(display).toHaveBeenLastCalledWith({ source: "live", value: 40 });
+      vi.advanceTimersByTime(5000);
+      live.observe({ reportedAt: 8500, outputTokens: 50 });
+      vi.advanceTimersByTime(1499);
+      expect(display).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(1);
+      expect(display).toHaveBeenLastCalledWith(undefined);
+      live.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("publishes by five seconds under sustained usage and discards pending updates on disposal", () => {
+    vi.useFakeTimers();
+    const display = vi.fn();
+    try {
+      const live = createLiveReplySpeed(display);
+      for (let index = 0; index <= 4; index += 1) {
+        if (index > 0) vi.advanceTimersByTime(1000);
+        live.observe({ reportedAt: 1000 + index * 1000, outputTokens: 10 + index * 20 });
+      }
+      vi.advanceTimersByTime(999);
+      expect(display).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(display).toHaveBeenCalledExactlyOnceWith({ source: "live", value: 20 });
+      live.observe({ reportedAt: 6000, outputTokens: 120 });
+      live.dispose();
+      vi.advanceTimersByTime(8000);
+      expect(display).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("bounds the rate to recent samples, ignores stale timestamps, and restarts on counter reset", () => {
+    vi.useFakeTimers();
+    const display = vi.fn();
+    try {
+      const live = createLiveReplySpeed(display);
+      live.observe({ reportedAt: 1000, outputTokens: 10 });
+      live.observe({ reportedAt: 5000, outputTokens: 50 });
+      live.observe({ reportedAt: 10000, outputTokens: 75 });
+      live.observe({ reportedAt: 10000, outputTokens: 500 });
+      live.observe({ reportedAt: 9500, outputTokens: 400 });
+      vi.advanceTimersByTime(1500);
+      expect(display).toHaveBeenLastCalledWith({ source: "live", value: 5 });
+
+      live.observe({ reportedAt: 11000, outputTokens: 2 });
+      expect(display).toHaveBeenLastCalledWith(undefined);
+      live.observe({ reportedAt: 12000, outputTokens: 14 });
+      vi.advanceTimersByTime(1500);
+      expect(display).toHaveBeenLastCalledWith({ source: "live", value: 12 });
+      live.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

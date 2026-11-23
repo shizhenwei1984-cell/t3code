@@ -3087,6 +3087,13 @@ describe("CodexAdapterV2 post-settle continuation", () => {
         outputTokens: 5,
         reasoningOutputTokens: 1,
       };
+      const nextUsage = {
+        totalTokens: 12,
+        inputTokens: 9,
+        cachedInputTokens: 3,
+        outputTokens: 3,
+        reasoningOutputTokens: 2,
+      };
       const transcript = makeCodexReplayTranscript({
         scenario: "async-question-and-billed-usage",
         entries: [
@@ -3122,6 +3129,28 @@ describe("CodexAdapterV2 post-settle continuation", () => {
                 threadId: nativeThreadId,
                 turnId: nativeTurnId,
                 tokenUsage: { total: usage, last: usage, modelContextWindow: 200_000 },
+              },
+            },
+          },
+          {
+            type: "emit_inbound",
+            label: "next usage",
+            frame: {
+              method: "thread/tokenUsage/updated",
+              params: {
+                threadId: nativeThreadId,
+                turnId: nativeTurnId,
+                tokenUsage: {
+                  total: {
+                    totalTokens: 27,
+                    inputTokens: 19,
+                    cachedInputTokens: 5,
+                    outputTokens: 8,
+                    reasoningOutputTokens: 3,
+                  },
+                  last: nextUsage,
+                  modelContextWindow: 200_000,
+                },
               },
             },
           },
@@ -3174,20 +3203,31 @@ describe("CodexAdapterV2 post-settle continuation", () => {
         (event) => event.type === "node.updated" && event.node.id === requests[0]?.nodeId,
       );
       assert.equal(questionNode?.type === "node.updated" && questionNode.node.countsForRun, false);
-      const contextReport = harness.events.find(
-        (event) =>
-          event.type === "provider_turn.updated" && event.providerTurn.tokenUsage !== undefined,
+      const contextReports = harness.events.flatMap((event) =>
+        event.type === "provider_turn.updated" &&
+        event.providerTurn.status === "running" &&
+        event.providerTurn.tokenUsage !== undefined
+          ? [event.providerTurn]
+          : [],
       );
-      assert.equal(contextReport?.type, "provider_turn.updated");
-      if (contextReport?.type === "provider_turn.updated") {
-        assert.equal(
-          contextReport.providerTurn.runAttemptId,
-          RunAttemptId.make("async-question-attempt"),
-        );
-        assert.equal(contextReport.providerTurn.providerThreadId, harness.providerThread.id);
-        assert.equal(contextReport.providerTurn.tokenUsage?.usedTokens, 15);
-        assert.equal(contextReport.providerTurn.tokenUsage?.maxTokens, 200_000);
+      assert.lengthOf(contextReports, 2);
+      for (const report of contextReports) {
+        assert.equal(report.runAttemptId, RunAttemptId.make("async-question-attempt"));
+        assert.equal(report.providerThreadId, harness.providerThread.id);
+        assert.equal(report.tokenUsage?.maxTokens, 200_000);
       }
+      assert.deepEqual(
+        contextReports.map((report) => [
+          report.tokenUsage?.usedTokens,
+          report.tokenUsage?.outputTokens,
+          report.turnTokenUsage?.usageStatus,
+          report.turnTokenUsage?.outputTokens,
+        ]),
+        [
+          [15, 5, "partial", 5],
+          [12, 3, "partial", 8],
+        ],
+      );
       const completed = harness.events.find(
         (event) =>
           event.type === "provider_turn.updated" && event.providerTurn.status === "completed",
@@ -3198,10 +3238,10 @@ describe("CodexAdapterV2 post-settle continuation", () => {
           usageStatus: "complete",
           usageScope: "main_agent",
           hasSubagents: false,
-          inputTokens: 10,
-          cachedInputTokens: 2,
-          outputTokens: 5,
-          reasoningTokens: 1,
+          inputTokens: 19,
+          cachedInputTokens: 5,
+          outputTokens: 8,
+          reasoningTokens: 3,
         });
       }
       assert.isEmpty(assistantMessages(harness.events));
