@@ -70,6 +70,7 @@ import {
   EnvironmentSpeechStatus,
   EnvironmentSpeechTranscriptionResult,
 } from "./speech.ts";
+import { ThreadUsageSummary } from "./providerRuntime.ts";
 import { SecretReference } from "./secretReference.ts";
 import {
   OrchestrationV2ShellHttpSnapshot,
@@ -785,6 +786,18 @@ class EnvironmentOrchestrationHttpApi extends HttpApiGroup.make("orchestration")
         headers: OrchestrationProtocolHeaders,
         params: EnvironmentOrchestrationThreadSnapshotParams,
         success: Schema.Int,
+        error: EnvironmentOrchestrationThreadSnapshotErrors,
+      },
+    ).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.get(
+      "threadUsageSummary",
+      "/api/orchestration/threads/:threadId/usage-summary",
+      {
+        headers: OrchestrationProtocolHeaders,
+        params: EnvironmentOrchestrationThreadSnapshotParams,
+        success: ThreadUsageSummary,
         error: EnvironmentOrchestrationThreadSnapshotErrors,
       },
     ).middleware(EnvironmentAuthenticatedAuth),

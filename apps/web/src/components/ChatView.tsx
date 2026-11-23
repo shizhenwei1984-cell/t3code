@@ -302,7 +302,7 @@ import {
 } from "./chat/ChatOverlayHosts";
 import type { AssistantCitationRequest } from "./chat/AssistantCitationSource";
 import { useCitedHistory } from "./chat/citationProcedure";
-import { composerReplySpeed, replySpeeds } from "./chat/replySpeed";
+import { composerTurnStatsInput, replySpeeds } from "./chat/replySpeed";
 import type { MessagesTimelineHistoryControls } from "./chat/MessagesTimeline";
 import { ThreadTimeline } from "./chat/ThreadTimeline";
 import { NativeChildWorkDialog } from "./chat/NativeChildWorkDialog";
@@ -573,8 +573,7 @@ export default function ChatView(props: ChatViewProps) {
     serverProjection?.providerTurns ?? [],
     serverVisibleTurnItems,
   );
-  const composerSpeed = composerReplySpeed({
-    threadKey: routeThreadKey,
+  const composerStats = composerTurnStatsInput({
     runs: serverProjection?.runs ?? [],
     turns: serverProjection?.providerTurns ?? [],
     settledSpeed: Array.from(speedsByMessage.values()).at(-1),
@@ -3726,7 +3725,8 @@ export default function ChatView(props: ChatViewProps) {
                             {!composerMounted ? null : (
                               <ChatComposer
                                 turnStats={{
-                                  speed: composerSpeed,
+                                  input: composerStats,
+                                  thread: serverProjection ? routeThreadDetailRef : null,
                                   calls: routeKind === "draft" ? 0 : toolCallCount,
                                 }}
                                 canOperateThread={canOperateThread}

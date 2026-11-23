@@ -1,5 +1,9 @@
 import type { ProjectThreadAwarenessV2Input } from "@t3tools/shared/agentAwareness";
-import { applyOrchestrationV2ThreadVisit, pendingGuestMessageCount } from "@t3tools/contracts";
+import {
+  applyOrchestrationV2ThreadVisit,
+  pendingGuestMessageCount,
+  ThreadUsageSummary,
+} from "@t3tools/contracts";
 import { applyThreadPullRequestLinkUpdate } from "../sourceControl/threadPullRequests.ts";
 import { projectTurnItemForWire } from "./WireProjection.ts";
 import * as Stream from "effect/Stream";
@@ -566,6 +570,12 @@ export interface ProjectionStoreV2Shape {
     limit: number,
   ) => Effect.Effect<number, ProjectionStoreV2Error>;
   readonly getSubagentCount: (threadId: ThreadId) => Effect.Effect<number, ProjectionStoreV2Error>;
+  readonly getThreadUsageSummary: (
+    threadId: ThreadId,
+  ) => Effect.Effect<
+    ThreadUsageSummary,
+    ProjectionStoreThreadNotFoundError | ProjectionStoreReadError
+  >;
   readonly getRunCount: (threadId: ThreadId) => Effect.Effect<number, ProjectionStoreV2Error>;
   /** Child threads of the thread's app-owned tasks, in task order, without decoding the tasks. */
   readonly listAppOwnedChildThreadIds: (
@@ -1440,6 +1450,7 @@ const decodeProviderSessionPayload = Schema.decodeUnknownEffect(
 const decodeProviderThreadPayload = Schema.decodeUnknownEffect(
   Schema.fromJsonString(OrchestrationV2ProviderThreadJsonSchema),
 );
+const decodeThreadUsageSummary = Schema.decodeUnknownEffect(ThreadUsageSummary);
 const decodeProviderTurnPayload = Schema.decodeUnknownEffect(
   Schema.fromJsonString(OrchestrationV2ProviderTurnJsonSchema),
 );
@@ -6657,6 +6668,45 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
         Effect.map((rows) => rows[0]?.bytes ?? 0),
         Effect.mapError(controlReadError(threadId)),
       );
+    const getThreadUsageSummary = Effect.fn("ProjectionStore.getThreadUsageSummary")(
+      function* (threadId: ThreadId) {
+        yield* requireThread(threadId);
+        const rows = yield* sql`
+          WITH root_usage AS (
+            SELECT
+              json_extract(turn.payload_json, '$.turnTokenUsage.usageStatus') AS status,
+              json_extract(turn.payload_json, '$.turnTokenUsage.inputTokens') AS input,
+              json_extract(turn.payload_json, '$.turnTokenUsage.outputTokens') AS output,
+              json_extract(turn.payload_json, '$.turnTokenUsage.cachedInputTokens') AS cached
+            FROM orchestration_v2_projection_provider_turns AS turn
+            JOIN orchestration_v2_projection_run_attempts AS attempt
+              ON attempt.attempt_id = turn.run_attempt_id
+              AND attempt.thread_id = turn.thread_id
+              AND attempt.root_node_id = turn.node_id
+            WHERE turn.thread_id = ${threadId}
+              AND json_extract(turn.payload_json, '$.turnTokenUsage.localCommand') IS NOT 1
+          )
+          SELECT
+            CASE WHEN COUNT(input) + COUNT(output) > 0
+              THEN COALESCE(SUM(input), 0) + COALESCE(SUM(output), 0)
+            END AS totalTokens,
+            COUNT(*) FILTER (WHERE status IS NOT 'complete' OR input IS NULL OR output IS NULL)
+              AS incompleteTurns,
+            CASE WHEN COUNT(*) FILTER (WHERE input IS NULL
+                OR (input > 0 AND (cached IS NULL OR cached > input))) = 0
+              THEN 1.0 * SUM(CASE WHEN input > 0 THEN cached ELSE 0 END) / NULLIF(SUM(input), 0)
+            END AS cacheHitRate
+          FROM root_usage
+        `;
+        const row = rows[0];
+        return yield* decodeThreadUsageSummary({
+          ...row,
+          complete: row?.incompleteTurns === 0,
+        });
+      },
+      (effect, threadId) => effect.pipe(Effect.mapError(controlReadError(threadId))),
+    );
+
     const getRunCount: ProjectionStoreV2Shape["getRunCount"] = (threadId) =>
       sql<{
         count: number;
@@ -9780,6 +9830,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
       getTranscriptByteFloor: readOnReader(getTranscriptByteFloor),
       getSubagentCount: readOnReader(getSubagentCount),
       getRunCount: readOnReader(getRunCount),
+      getThreadUsageSummary: readOnReader(getThreadUsageSummary),
       listAppOwnedChildThreadIds: readOnReader(listAppOwnedChildThreadIds),
       hasPendingDelegatedCompletion: readOnReader(hasPendingDelegatedCompletion),
       getNextTurnItemOrdinal: readOnReader(getNextTurnItemOrdinal),

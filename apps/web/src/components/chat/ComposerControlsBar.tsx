@@ -1,4 +1,5 @@
 import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
+import { formatPercent, formatTokens } from "@t3tools/shared/usageFormat";
 import type { ChatComposerProps } from "./ChatComposer";
 import type { PromptUltrathink } from "./TraitsPicker";
 import type { ProviderInstanceEntry } from "../../providerInstances";
@@ -32,7 +33,7 @@ import {
 } from "./ComposerModelEffort";
 import type { useComposerProviderModel } from "./useComposerProviderModel";
 import { resolveComposerControlsOwnership } from "./composerControlsOwnership";
-import type { LiveReplySpeed, ReplySpeed } from "./replySpeed";
+import type { ComposerTurnStats } from "./replySpeed";
 
 /**
  * The composer footer controls: the model picker (which also holds effort, speed and
@@ -43,7 +44,7 @@ import type { LiveReplySpeed, ReplySpeed } from "./replySpeed";
 const MODEL_TRIGGER_STATES = "data-popup-open:bg-accent data-popup-open:text-foreground";
 
 export function ComposerControlsBar(props: {
-  replySpeed: ReplySpeed | LiveReplySpeed | undefined;
+  turnStats: ComposerTurnStats;
   toolCallCount: number | null;
   environmentId: EnvironmentId;
   workspaceCwd: string | null;
@@ -252,16 +253,47 @@ export function ComposerControlsBar(props: {
       onOpenProviderSetup={onOpenProviderSetup}
     />
   );
-  const speed = props.replySpeed;
+  const { speed, usage } = props.turnStats;
+  const tokens =
+    usage?.totalTokens == null
+      ? "–"
+      : `${usage.complete ? "" : "≈"}${formatTokens(usage.totalTokens)}`;
+  const cache = usage?.cacheHitRate == null ? "–" : formatPercent(usage.cacheHitRate);
+  const usageTitle =
+    usage?.complete === false
+      ? gt("Partial main-agent token usage in this chat")
+      : gt("Main-agent token usage in this chat");
+  const cacheTitle =
+    usage?.cacheHitRate == null
+      ? gt("Cache hit rate unavailable")
+      : gt("Share of main-agent input tokens read from cache");
   const rate = speed && speed.source !== "unavailable" ? speed.value.toFixed(1) : "–";
-  const speedTitle =
-    speed?.source === "native"
-      ? gt("{rate} tok/s · provider", { rate })
-      : speed?.source === "average"
-        ? gt("{rate} tok/s · average", { rate })
-        : speed?.source === "live"
-          ? gt("{rate} tok/s · live estimate", { rate })
-          : gt("Speed unavailable");
+  let speedTitle: string;
+  if (!speed) {
+    speedTitle = gt("Speed unavailable");
+  } else {
+    switch (speed.source) {
+      case "native":
+        speedTitle = gt("{rate} tok/s · provider", { rate });
+        break;
+      case "average":
+        speedTitle = gt("{rate} tok/s · average", { rate });
+        break;
+      case "live":
+        speedTitle = gt("{rate} tok/s · live estimate", { rate });
+        break;
+      case "last-measured":
+        speedTitle = gt("{rate} tok/s · last measured", { rate });
+        break;
+      case "unavailable":
+        speedTitle = gt("Speed unavailable");
+        break;
+      default: {
+        const _exhaustive: never = speed;
+        speedTitle = _exhaustive;
+      }
+    }
+  }
   return (
     <>
       <Tooltip>
@@ -269,14 +301,20 @@ export function ComposerControlsBar(props: {
           render={
             <span
               data-composer-turn-stats=""
-              className="shrink-0 whitespace-nowrap text-xs tabular-nums text-muted-foreground"
+              data-composer-speed-source={speed?.source ?? "unavailable"}
+              className="min-w-0 text-xs tabular-nums text-muted-foreground"
             />
           }
         >
-          {gt("{rate} tok/s · {count} calls", { rate, count: props.toolCallCount ?? "–" })}
+          {gt("{rate} tok/s · {tokens} tokens · {cache} cache hit · {count} calls", {
+            rate,
+            tokens,
+            cache,
+            count: props.toolCallCount ?? "–",
+          })}
         </TooltipTrigger>
         <TooltipPopup>
-          {speedTitle} · {gt("Tool calls in chat")}
+          {speedTitle} · {usageTitle} · {cacheTitle} · {gt("Tool calls in chat")}
         </TooltipPopup>
       </Tooltip>
       {showProviderUnavailable ? (

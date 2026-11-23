@@ -30,6 +30,7 @@ import {
   OLDER_THREAD_USER_TURN_LIMIT,
 } from "./threadHistoryPaging.ts";
 import * as ThreadManagementService from "./ThreadManagementService.ts";
+import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ProjectStore from "./ProjectStore.ts";
 import {
   loadShellUnlessResumable,
@@ -61,6 +62,7 @@ export const layer = HttpApiBuilder.group(
     const environment = yield* ServerEnvironment.ServerEnvironmentIdentity;
     const threadManagement = yield* ThreadManagementService.ThreadManagementService;
     const applicationEvents = yield* OrchestrationEventStore.OrchestrationEventStore;
+    const projectionStore = yield* ProjectionStore.ProjectionStoreV2;
     const projectStore = yield* ProjectStore.ProjectStoreV2;
     const projectEnrichment = yield* ProjectEnrichmentService.ProjectEnrichmentService;
 
@@ -229,6 +231,21 @@ export const layer = HttpApiBuilder.group(
           );
           if (!rows[0]) return yield* failEnvironmentNotFound("thread_not_found");
           return rows[0].total;
+        }),
+      )
+      .handle(
+        "threadUsageSummary",
+        Effect.fn("environment.orchestration.threadUsageSummary")(function* (args) {
+          yield* annotateEnvironmentRequest(args.endpoint.name);
+          yield* requireEnvironmentScope(AuthOrchestrationReadScope);
+          return yield* projectionStore.getThreadUsageSummary(args.params.threadId).pipe(
+            traceLocalHandlerWork,
+            Effect.catchTags({
+              ProjectionStoreThreadNotFoundError: () => failEnvironmentNotFound("thread_not_found"),
+              ProjectionStoreReadError: (error) =>
+                failEnvironmentInternal("orchestration_thread_snapshot_failed", error),
+            }),
+          );
         }),
       )
       .handle(

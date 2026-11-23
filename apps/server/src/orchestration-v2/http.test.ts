@@ -38,6 +38,7 @@ import * as OrchestrationEventStore from "../persistence/OrchestrationEventStore
 import { ProjectEnrichmentService } from "../project/ProjectEnrichmentService.ts";
 import * as OrchestrationHttp from "./http.ts";
 import { EventSinkV2 } from "./EventSink.ts";
+import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ProjectStore from "./ProjectStore.ts";
 import * as CommandReceiptStore from "./CommandReceiptStore.ts";
 import * as ThreadManagementService from "./ThreadManagementService.ts";
@@ -135,6 +136,7 @@ const serveOrchestrationHttp = (allowed: () => boolean) =>
         ),
         OrchestrationEventStore.layer,
         ProjectStore.layer,
+        ProjectionStore.layer,
       ).pipe(Layer.provideMerge(SqlitePersistence.layerMemory)),
     );
     const eventSink = Context.get(services, EventSinkV2);
@@ -425,5 +427,30 @@ it.effect("counts distinct tool calls across the thread, including failed calls"
     expect(yield* Effect.promise(() => result.json())).toEqual(2);
     allowed = false;
     expect((yield* read()).status).toBe(403);
+  }),
+);
+
+it.effect("requires orchestration read access to a thread's usage summary", () =>
+  Effect.gen(function* () {
+    let allowed = true;
+    const { handler } = yield* serveOrchestrationHttp(() => allowed);
+    const read = (threadId: ThreadId) =>
+      Effect.promise(() =>
+        handler(
+          new Request(`http://localhost/api/orchestration/threads/${threadId}/usage-summary`, {
+            headers: { [ORCHESTRATION_PROTOCOL_HEADER]: ORCHESTRATION_PROTOCOL_VERSION_TEXT },
+          }),
+        ),
+      );
+    const initial = yield* read(thread.id);
+    expect(initial.status).toBe(200);
+    expect(yield* Effect.promise(() => initial.json())).toEqual({
+      totalTokens: null,
+      complete: true,
+      cacheHitRate: null,
+    });
+    expect((yield* read(ThreadId.make("missing"))).status).toBe(404);
+    allowed = false;
+    expect((yield* read(thread.id)).status).toBe(403);
   }),
 );

@@ -1,5 +1,10 @@
 {
-  "8905a6114dd2062c": "{rate} tok/s · {count} Aufrufe",
+  "42be7c77e1960831": "{rate} Tok./s · {tokens} Tokens · {cache} Cache-Treffer · {count} Aufrufe",
+  "d1996c651fdeb9f3": "Teilweise erfasster Tokenverbrauch des Hauptagenten in diesem Chat",
+  "2e9ce4904d186d6c": "Tokenverbrauch des Hauptagenten in diesem Chat",
+  "0d7ab44cdb6b53c3": "Cache-Trefferquote nicht verfügbar",
+  "e5e865b757f025d6": "Anteil der Eingabetokens des Hauptagenten aus dem Cache",
+  "a72cecdc70a02ba9": "{rate} tok/s · zuletzt gemessen",
   "4bcfa3b976a421cf": "Nebenchat",
   "23be753133ae6950": "Thread",
   "0001ae5846061bb6": "Thread auf {machine}",

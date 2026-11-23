@@ -38,6 +38,7 @@ import type { EnvironmentShellState } from "./shell.ts";
 import {
   fetchEnvironmentThreadTranscript,
   fetchEnvironmentThreadToolCallCount,
+  fetchEnvironmentThreadUsageSummary,
 } from "./threadTranscriptHttp.ts";
 
 export function createOrchestrationEnvironmentAtoms<R, E>(
@@ -152,6 +153,17 @@ export function createOrchestrationEnvironmentAtoms<R, E>(
         readonly settledRevision: string | null;
       }) {
         return yield* fetchEnvironmentThreadToolCallCount(yield* threadRead(input.threadId));
+      }),
+    }),
+    threadUsageSummary: createEnvironmentQueryAtomFamily(runtime, {
+      label: "environment-data:orchestration:thread-usage-summary",
+      staleTimeMs: 0,
+      idleTtlMs: 0,
+      execute: Effect.fn("orchestration.threadUsageSummary")(function* (input: {
+        readonly threadId: ThreadId;
+        readonly revision: string;
+      }) {
+        return yield* fetchEnvironmentThreadUsageSummary(yield* threadRead(input.threadId));
       }),
     }),
     threadTranscript: createEnvironmentCommand(runtime, {

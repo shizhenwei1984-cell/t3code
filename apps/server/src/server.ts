@@ -846,7 +846,7 @@ const layerMakeRoutes = Layer.mergeAll(
       Layer.provide(AuthHttp.layer),
       Layer.provide(McpOAuthHttp.layer.pipe(Layer.provide(McpOAuth.layer))),
       Layer.provide(CloudHttp.layer),
-      Layer.provide(OrchestrationHttp.layer),
+      Layer.provide(OrchestrationHttp.layer.pipe(Layer.provide(ProjectionStoreV2.layer))),
       Layer.provide(PullRequestHttp.layer),
       Layer.provide(ProjectHttp.layer),
       Layer.provide(speechHttpApiLayer),

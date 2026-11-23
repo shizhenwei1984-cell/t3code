@@ -47,3 +47,17 @@ export const fetchEnvironmentThreadToolCallCount = (input: ThreadRead) =>
         headers: withOrchestrationProtocolHeader(headers),
       }),
   });
+
+export const fetchEnvironmentThreadUsageSummary = (input: ThreadRead) =>
+  executeAuthenticatedEnvironmentHttpRequest({
+    ...input,
+    group: "orchestration",
+    method: "GET",
+    timeoutMs: 10_000,
+    url: (urls) => urls.threadUsageSummary({ params: { threadId: input.threadId } }),
+    request: ({ client, headers }) =>
+      client.threadUsageSummary({
+        params: { threadId: input.threadId },
+        headers: withOrchestrationProtocolHeader(headers),
+      }),
+  });

@@ -23,6 +23,7 @@ import {
   ProviderInstanceId,
   ProviderSessionId,
   ProviderThreadId,
+  type OrchestrationV2ProviderTurn,
   ProviderTurnId,
   RuntimeRequestId,
   RunAttemptId,
@@ -869,6 +870,34 @@ it.effect("a compacted thread reads every run, but records and prompts only for 
     const rootNodeId = (ordinal: number) => NodeId.make(`node:compacted:${ordinal}`);
     const attemptId = (ordinal: number) => RunAttemptId.make(`attempt:compacted:${ordinal}`);
     const providerThreadId = ProviderThreadId.make("provider-thread:compacted");
+    let usageEvent = 0;
+    const storeUsage = (
+      ordinal: number,
+      usage: NonNullable<OrchestrationV2ProviderTurn["turnTokenUsage"]>,
+      child = false,
+    ) => {
+      const nodeId = child ? NodeId.make("node:compacted:usage-child") : rootNodeId(ordinal);
+      return store.apply({
+        id: EventId.make(`event:compacted:usage:${++usageEvent}`),
+        type: "provider-turn.updated",
+        threadId,
+        nodeId,
+        driver,
+        occurredAt: at(ordinal),
+        payload: {
+          id: ProviderTurnId.make(`turn:compacted:${child ? "child" : ordinal}`),
+          providerThreadId,
+          nodeId,
+          runAttemptId: attemptId(ordinal),
+          nativeTurnRef: null,
+          ordinal: child ? 16 : ordinal,
+          status: usage.usageStatus === "partial" ? "running" : "completed",
+          startedAt: at(ordinal),
+          completedAt: usage.usageStatus === "partial" ? null : at(ordinal + 0.5),
+          turnTokenUsage: usage,
+        },
+      });
+    };
     const messageId = (ordinal: number) => MessageId.make(`message:compacted:${ordinal}`);
     const item = (
       ordinal: number,
@@ -1331,6 +1360,75 @@ it.effect("a compacted thread reads every run, but records and prompts only for 
       ),
       both,
     );
+
+    const usage = {
+      usageScope: "main_agent",
+      usageStatus: "complete",
+      hasSubagents: false,
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedInputTokens: 0,
+    } as const;
+    for (const ordinal of all) yield* storeUsage(ordinal, usage);
+    assert.deepEqual(yield* store.getThreadUsageSummary(threadId), {
+      totalTokens: 0,
+      complete: true,
+      cacheHitRate: null,
+    });
+    yield* storeUsage(3, {
+      ...usage,
+      inputTokens: 100,
+      cachedInputTokens: 80,
+      outputTokens: 20,
+      reasoningTokens: 15,
+      cacheCreationTokens: 10,
+      otherUsage: { inputTokens: 400, outputTokens: 200 },
+    });
+    yield* storeUsage(4, {
+      ...usage,
+      inputTokens: 900,
+      cachedInputTokens: 900,
+      localCommand: true,
+    });
+    yield* storeUsage(15, { ...usage, inputTokens: 900, outputTokens: 100 }, true);
+    yield* storeUsage(15, {
+      ...usage,
+      usageStatus: "partial",
+      inputTokens: 300,
+      cachedInputTokens: 20,
+      outputTokens: 10,
+    });
+    const current = (yield* store.getThreadSnapshotWindow(threadId, { rowLimit: 1 })).projection;
+    assert.isFalse(
+      current.providerTurns.some(({ id }) => id === ProviderTurnId.make("turn:compacted:3")),
+    );
+    assert.deepEqual(yield* store.getThreadUsageSummary(threadId), {
+      totalTokens: 430,
+      complete: false,
+      cacheHitRate: 0.25,
+    });
+    yield* storeUsage(15, {
+      ...usage,
+      inputTokens: 300,
+      cachedInputTokens: 40,
+      outputTokens: 30,
+    });
+    assert.deepEqual(yield* store.getThreadUsageSummary(threadId), {
+      totalTokens: 450,
+      complete: true,
+      cacheHitRate: 0.3,
+    });
+    yield* storeUsage(15, {
+      usageScope: "main_agent",
+      usageStatus: "partial",
+      hasSubagents: false,
+      inputTokens: 300,
+    });
+    assert.deepEqual(yield* store.getThreadUsageSummary(threadId), {
+      totalTokens: 420,
+      complete: false,
+      cacheHitRate: null,
+    });
 
     // A prompt that clients do not show cannot anchor a model switch. With the recent ones, and
     // run 4's, folded into async answers, the switch is measured from run 10, so its prompt is

@@ -85,6 +85,13 @@ export const TurnTokenUsage = Schema.Union([
 ]);
 export type TurnTokenUsage = typeof TurnTokenUsage.Type;
 
+export const ThreadUsageSummary = Schema.Struct({
+  totalTokens: Schema.NullOr(NonNegativeInt),
+  complete: Schema.Boolean,
+  cacheHitRate: Schema.NullOr(Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 1 }))),
+});
+export type ThreadUsageSummary = typeof ThreadUsageSummary.Type;
+
 export const ToolActivitySurface = Schema.Literals(["browser", "computer"]);
 export type ToolActivitySurface = typeof ToolActivitySurface.Type;
 
